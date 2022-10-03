@@ -1,5 +1,11 @@
 # protonrun
-protonrun is a simple script which automates creating a installing and updating GloriousEggroll's Proton distribution and executing applications.
+protonrun is a simple script which allows one to run games, or other applications, in GloriousEggroll's Proton distribution directly from the CLI. protonrun will download and update GE-Proton for you.
+
+## Getting Started
+By default, protonrun's files, which include your game saves, and end up in HOME/proton. To change this behavior, define PROTON\_PATH in your environment. 
+
+1. `protonrun install`
+2. `protonrun run [SteamAppId] [Binary Path]`
 
 ## Useage
 ```
