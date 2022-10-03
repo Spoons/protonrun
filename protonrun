@@ -5,7 +5,7 @@ PROTON_PATH="${PROTON_PATH:-$HOME/proton}"
 PROTON_PATH_COMPAT="$PROTON_PATH/compatdata"
 
 latest_proton() {
-	find "$PROTON_PATH" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
+	find "$PROTON_PATH_COMPAT" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
 }
 
 if [[ "$1" == "install" ]]; then
@@ -26,8 +26,8 @@ if [[ "$1" == "install" ]]; then
 	tar xf "$latest_proton_tar"
 
 	cd "$(latest_proton)" || exit 3
-	for file in "/files/lib64/wine/x86_64-windows/lsteamclient.dll" "/files/lib/wine/i386-windows/lsteamclient.dll"; do
-		rm "$file"
+	for file in "files/lib64/wine/x86_64-windows/lsteamclient.dll" "files/lib/wine/i386-windows/lsteamclient.dll"; do
+		rm -f "$file"
 	done
 
 elif [[ "$1" == "run" ]]; then
