@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Set proton path to where you want your saves
+PROTON_PATH="${PROTON_PATH:-$HOME/proton}"
+PROTON_PATH_COMPAT="$PROTON_PATH/compatdata"
+
+latest_proton() {
+	find "$PROTON_PATH" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
+}
+
+if [[ "$1" == "install" ]]; then
+	if ! command -v jq &> /dev/null ; then
+		echo "jq is not installed"
+		exit 1
+	fi
+
+	mkdir -p "$PROTON_PATH_COMPAT"
+	cd "$PROTON_PATH_COMPAT" || exit 2
+	assets=$(curl https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases | jq -r '.[0].assets[].browser_download_url')
+
+	for asset in $assets; do
+		curl -OL "$asset"
+	done
+
+	latest_proton_tar="$(find . -maxdepth 1 -type f | sort -V | tail -1 | sed 's|^./||')"
+	tar xf "$latest_proton_tar"
+
+	cd "$(latest_proton)" || exit 3
+	for file in "/files/lib64/wine/x86_64-windows/lsteamclient.dll" "/files/lib/wine/i386-windows/lsteamclient.dll"; do
+		rm "$file"
+	done
+
+elif [[ "$1" == "run" ]]; then
+	SteamAppId="$2" STEAM_COMPAT_DATA_PATH="$PROTON_PATH_COMPAT" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ "$(latest_proton)/proton" waitforexitandrun "${@:3}"
+elif [[ "$1" == "help" ]] || [[ "$1" == "-h" ]]; then
+	printf '%s\n' 'Usage: '
+	printf '  %s\n' "$0 [-h|--help]"
+	printf '  %s\n' "$0 install"
+	printf '  %s\n' "$0 run [SteamAppId] [Path]"
+	printf '\n%s\n' 'Proton exec wrapper'
+	printf '  %s\t%s\n' "-h, --help" "Prints help"
+	printf '  %s\t%s\n' "install" "installs GE proton and creates prefix"
+	printf '  %s\t\t%s\n' "run" "executes binary at PATH with fixes from SteamAppId"
+	printf '\n%s\n' "Assign PROTON_PATH to change prefix and proton location."
+fi
