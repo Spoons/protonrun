@@ -5,7 +5,7 @@ PROTON_PATH="${PROTON_PATH:-$HOME/proton}"
 PROTON_PATH_COMPAT="$PROTON_PATH/compatdata"
 
 latest_proton() {
-	find "$PROTON_PATH_COMPAT" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
+	find "$PROTON_PATH" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
 }
 
 if [[ "$1" == "install" ]]; then
@@ -15,14 +15,14 @@ if [[ "$1" == "install" ]]; then
 	fi
 
 	mkdir -p "$PROTON_PATH_COMPAT"
-	cd "$PROTON_PATH_COMPAT" || exit 2
+	cd "$PROTON_PATH" || exit 2
 	assets=$(curl https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases | jq -r '.[0].assets[].browser_download_url')
 
 	for asset in $assets; do
 		curl -OL "$asset"
 	done
 
-	latest_proton_tar="$(find . -maxdepth 1 -type f | sort -V | tail -1 | sed 's|^./||')"
+	latest_proton_tar="$(find . -maxdepth 1 -type f -iname '*.tar.gz' | sort -V | tail -1 | sed 's|^./||')"
 	tar xf "$latest_proton_tar"
 
 	cd "$(latest_proton)" || exit 3
@@ -31,7 +31,22 @@ if [[ "$1" == "install" ]]; then
 	done
 
 elif [[ "$1" == "run" ]]; then
-	SteamAppId="$2" STEAM_COMPAT_DATA_PATH="$PROTON_PATH_COMPAT" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ "$(latest_proton)/proton" waitforexitandrun "${@:3}"
+	PROTON_PATH_COMPAT="$PROTON_PATH_COMPAT/$2"
+	mkdir -p "$PROTON_PATH_COMPAT"
+	#CMD="SteamAppId=\"$2\" STEAM_COMPAT_DATA_PATH=\"$PROTON_PATH_COMPAT\" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ \"$(latest_proton)/proton\" waitforexitandrun \"${@:3}\""
+	MANGOHUD=1 DXVK_ASYNC=1 SteamAppId="$2" STEAM_COMPAT_DATA_PATH="$PROTON_PATH_COMPAT" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ "$(latest_proton)/proton" waitforexitandrun "${@:3}"
+	# if command -v gamemoderun &> /dev/null ; then
+	# 	CMD="gamemoderun $CMD"
+	# fi
+	# eval $CMD
+
+elif [[ "$1" == "kill" ]]; then
+	if ! command -v wineserver &> /dev/null; then
+		echo "wineserver is not installed"
+		exit 4
+	fi
+	WINEPREFIX="$PROTON_PATH_COMPAT/$2/pfx" wineserver -k
+
 elif [[ "$1" == "help" ]] || [[ "$1" == "-h" ]]; then
 	printf '%s\n' 'Usage: '
 	printf '  %s\n' "$0 [-h|--help]"
