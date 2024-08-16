@@ -3,58 +3,153 @@
 # Set proton path to where you want your saves
 PROTON_PATH="${PROTON_PATH:-$HOME/proton}"
 PROTON_PATH_COMPAT="$PROTON_PATH/compatdata"
+ENV_DIR="$PROTON_PATH/envs"
 
 latest_proton() {
-	find "$PROTON_PATH" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
+    find "$PROTON_PATH" -maxdepth 1 -type d | grep -E "GE-Proton.*" | sort -V | tail -1 | sed 's|^./||'
 }
 
-if [[ "$1" == "install" ]]; then
-	if ! command -v jq &> /dev/null ; then
-		echo "jq is not installed"
-		exit 1
-	fi
+create_desktop_file() {
+    local app_id=$1
+    local exe_path=$2
+    local name=$3
+    local desktop_file="$HOME/.local/share/applications/$name.desktop"
+    local env_file="$ENV_DIR/$app_id.env"
 
-	mkdir -p "$PROTON_PATH_COMPAT"
-	cd "$PROTON_PATH" || exit 2
-	assets=$(curl https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases | jq -r '.[0].assets[].browser_download_url')
+    echo "[Desktop Entry]" > "$desktop_file"
+    echo "Type=Application" >> "$desktop_file"
+    echo "Name=$name" >> "$desktop_file"
+    echo "Exec=bash -c 'source $env_file; $0 run $app_id $exe_path'" >> "$desktop_file"
+    echo "Path=$PROTON_PATH_COMPAT/$app_id" >> "$desktop_file"
+    echo "Icon=application-x-wine" >> "$desktop_file"
+    chmod +x "$desktop_file"
+}
 
-	for asset in $assets; do
-		curl -OL "$asset"
-	done
+set_environment_variable() {
+    local app_id=$1
+    local var_name=$2
+    local value=$3
+    local env_file="$ENV_DIR/$app_id.env"
 
-	latest_proton_tar="$(find . -maxdepth 1 -type f -iname '*.tar.gz' | sort -V | tail -1 | sed 's|^./||')"
-	tar xf "$latest_proton_tar"
+    mkdir -p "$ENV_DIR"
+    if [[ ! -f "$env_file" ]]; then
+      touch "$env_file"
+    fi
+    if grep -q "^$var_name=" "$env_file"; then
+        sed -i "s/^$var_name=.*/$var_name=\"$value\"/" "$env_file"
+    else
+        echo "$var_name=\"$value\"" >> "$env_file"
+    fi
+}
 
-	cd "$(latest_proton)" || exit 3
-	for file in "files/lib64/wine/x86_64-windows/lsteamclient.dll" "files/lib/wine/i386-windows/lsteamclient.dll"; do
-		rm -f "$file"
-	done
+show_environment_variables() {
+    local app_id=$1
+    local env_file="$ENV_DIR/$app_id.env"
 
-elif [[ "$1" == "run" ]]; then
-	PROTON_PATH_COMPAT="$PROTON_PATH_COMPAT/$2"
-	mkdir -p "$PROTON_PATH_COMPAT"
-	#CMD="SteamAppId=\"$2\" STEAM_COMPAT_DATA_PATH=\"$PROTON_PATH_COMPAT\" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ \"$(latest_proton)/proton\" waitforexitandrun \"${@:3}\""
-	MANGOHUD=1 DXVK_ASYNC=1 SteamAppId="$2" STEAM_COMPAT_DATA_PATH="$PROTON_PATH_COMPAT" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ "$(latest_proton)/proton" waitforexitandrun "${@:3}"
-	# if command -v gamemoderun &> /dev/null ; then
-	# 	CMD="gamemoderun $CMD"
-	# fi
-	# eval $CMD
+    if [[ -f "$env_file" ]]; then
+        cat "$env_file"
+    else
+        echo "No environment variables set for App ID $app_id."
+    fi
+}
 
-elif [[ "$1" == "kill" ]]; then
-	if ! command -v wineserver &> /dev/null; then
-		echo "wineserver is not installed"
-		exit 4
-	fi
-	WINEPREFIX="$PROTON_PATH_COMPAT/$2/pfx" wineserver -k
+install_proton() {
+    if ! command -v jq &> /dev/null ; then
+        echo "jq is not installed"
+        exit 1
+    fi
 
-elif [[ "$1" == "help" ]] || [[ "$1" == "-h" ]]; then
-	printf '%s\n' 'Usage: '
-	printf '  %s\n' "$0 [-h|--help]"
-	printf '  %s\n' "$0 install"
-	printf '  %s\n' "$0 run [SteamAppId] [Path]"
-	printf '\n%s\n' 'Proton exec wrapper'
-	printf '  %s\t%s\n' "-h, --help" "Prints help"
-	printf '  %s\t%s\n' "install" "installs GE proton and creates prefix"
-	printf '  %s\t\t%s\n' "run" "executes binary at PATH with fixes from SteamAppId"
-	printf '\n%s\n' "Assign PROTON_PATH to change prefix and proton location."
+    mkdir -p "$PROTON_PATH_COMPAT"
+    cd "$PROTON_PATH" || exit 2
+    assets=$(curl https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases | jq -r '.[0].assets[].browser_download_url')
+
+    for asset in $assets; do
+        curl -OL "$asset"
+    done
+
+    latest_proton_tar="$(find . -maxdepth 1 -type f -iname '*.tar.gz' | sort -V | tail -1 | sed 's|^./||')"
+    tar xf "$latest_proton_tar"
+
+    cd "$(latest_proton)" || exit 3
+    for file in "files/lib64/wine/x86_64-windows/lsteamclient.dll" "files/lib/wine/i386-windows/lsteamclient.dll"; do
+        rm -f "$file"
+    done
+}
+
+run_game() {
+    local app_id=$1
+    local env_file="$ENV_DIR/$app_id.env"
+    
+    if [[ ! -f "$env_file" ]]; then
+        echo "No specific environment variables set for App ID $app_id. Running with default settings."
+    else
+        source "$env_file"
+    fi
+
+    PROTON_PATH_COMPAT="$PROTON_PATH_COMPAT/$app_id"
+    mkdir -p "$PROTON_PATH_COMPAT"
+    env SteamAppId="$app_id" STEAM_COMPAT_DATA_PATH="$PROTON_PATH_COMPAT" STEAM_COMPAT_CLIENT_INSTALL_PATH=/ gamemoderun "$(latest_proton)/proton" waitforexitandrun "${@:2}"
+}
+
+kill_wine_processes() {
+    local app_id=$1
+    if ! command -v wineserver &> /dev/null; then
+        echo "wineserver is not installed"
+        exit 4
+    fi
+    WINEPREFIX="$PROTON_PATH_COMPAT/$app_id/pfx" wineserver -k
+}
+
+display_help() {
+    printf '%s\n' 'Usage: '
+    printf '  %s\n' "$0 [-h|--help]"
+    printf '  %s\n' "$0 install"
+    printf '  %s\n' "$0 run [SteamAppId] [Path]"
+    printf '  %s\n' "$0 desktop [SteamAppId] [Path] [Name]"
+    printf '  %s\n' "$0 setenv [SteamAppId] [VariableName] [Value]"
+    printf '  %s\n' "$0 showenv [SteamAppId]"
+    printf '  %s\n' "$0 kill [SteamAppId]"
+    printf '\n%s\n' 'Proton exec wrapper commands:'
+    printf '  %s\t%s\n' "-h, --help" "Display this help message."
+    printf '  %s\t\t%s\n' "install" "Install the latest version of GloriousEggroll's custom Proton."
+    printf '  %s\t\t\t%s\n' "run" "Run a game with a specific Steam App ID and executable path."
+    printf '  %s\t\t%s\n' "desktop" "Create a desktop shortcut for a game with a specific Steam App ID, executable path, and name."
+    printf '  %s\t\t\t%s\n' "setenv" "Set or update an environment variable for a specific Steam App ID."
+    printf '  %s\t\t\t%s\n' "showenv" "Display the environment variables set for a specific Steam App ID."
+    printf '  %s\t\t\t%s\n' "kill" "Kill all Wine processes associated with a specific Steam App ID."
+    printf '\n%s\n' "Assign PROTON_PATH to change the default location for Proton and its game prefixes."
+}
+
+handle_input() {
+    case "$1" in
+        install)
+            install_proton "${@:2}"
+            ;;
+        run)
+            run_game "${@:2}"
+            ;;
+        desktop)
+            create_desktop_file "${@:2}"
+            ;;
+        kill)
+            kill_wine_processes "${@:2}"
+            ;;
+        setenv)
+            set_environment_variable "${@:2}"
+            ;;
+        showenv)
+            show_environment_variables "${@:2}"
+            ;;
+        help | -h | *)
+            display_help
+            ;;
+    esac
+  }
+
+# Main IO loop
+if [[ -z "$1" ]]; then
+    set -- "help"
 fi
+
+handle_input "$@"
+
